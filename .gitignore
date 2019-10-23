@@ -1,0 +1,12 @@
+# Exclude Pycharm Project Files
+
+/.idea/*
+/__pycache__/*
+
+# Exclude Log Files
+
+*.log
+
+# Exclude Torrent Files
+
+*.torrent
