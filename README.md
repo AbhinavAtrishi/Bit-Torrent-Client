@@ -4,3 +4,4 @@ This repository aims to eventually build a full-fledged BitTorrent Client writte
 
 Current Dependencies:
 * [Bencoder](https://github.com/utdemir/bencoder)
+* [Requests](https://github.com/psf/requests)
