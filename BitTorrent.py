@@ -5,9 +5,11 @@ import hashlib
 import random
 import socket
 import struct
+import asyncio
+from tqdm import tqdm
 log_file_name = 'ApplicationLog.log'
 version = '000'
-random.seed(9)
+random.seed(90)
 sys_id = ''.join(str(random.randint(0, 9)) for _ in range(12))
 my_id = ('-SBC'+version+'-'+sys_id).encode('ascii')
 
@@ -26,6 +28,8 @@ class Reader:
         self.url_params = None
         self.peer_list = None
         self.port_list = None
+        self.piece_length = None
+        self.length = None
         logging.basicConfig(filename=log_file_name, filemode='w')
         self.read()
         self.compute_sha()
@@ -49,6 +53,9 @@ class Reader:
             self.info = self.raw_file[b'info']
         except Exception as e:
             logging.warning(f'In {self.__class__.__name__}: Info not found', exc_info=e)
+
+        self.piece_length = self.info[b'piece length']
+        self.length = self.info[b'length']
 
     def compute_sha(self):
         self.info_sha1 = hashlib.sha1(bencoder.encode(self.info)).digest()
@@ -84,26 +91,81 @@ class Reader:
 
 # Downloader Class performs the handshake to peers & will then proceed to establish connection, request for pieces.
 class Downloader:
-    def __init__(self, peer_ip, peer_port, info, info_sha1):
+    def __init__(self, peer_ip, peer_port, info, info_sha1, piece_length, length):
         self.peer_ip = peer_ip
+        self.peer_id = None
         self.peer_port = peer_port
         self.info = info
         self.info_sha1 = info_sha1
+        self.piece_length = piece_length
+        self.length = length
         self.my_id = my_id
-        self.reserved = '00000000'
+        self.reserved = chr(0) * 8
         self.pstrlen = 19
         self.pstr = 'BitTorrent protocol'
+        self.Choked = True
 
-    def handshake(self):
-        handshake_message = ((chr(19)).encode('ascii') + "BitTorrent protocol".encode('ascii') +
-                             (8 * chr(0)).encode('ascii') + self.info_sha1 + self.my_id)
+    def choked_state(self, sock):
+        msg_interested = struct.pack('>Ib', 1, 2)
+        msg_unchoke = struct.pack('>Ib', 1, 1)
+        msg_len = len(msg_interested)
 
-        print(f'String being sent is : {handshake_message}')
+        # sock.connect((self.peer_ip, self.peer_port))
+        sock.sendall(msg_interested)
+        recv = sock.recv(msg_len)
+        while recv != msg_unchoke:
+            recv = sock.recv(msg_len)
+
+        print("Unchoked !")
+        return True
+
+    def handshake(self, sock):
+        handshake_message = ((chr(19)).encode('ascii') + b'BitTorrent protocol' +
+                             self.reserved.encode('ascii') + self.info_sha1 + self.my_id)
+
+        # sock.connect((self.peer_ip, self.peer_port))
+        sock.sendall(handshake_message)
+        reply = sock.recv(len(handshake_message))
+        sha_recv = reply[28:48]
+        self.peer_id = reply[48:]
+
+        if sha_recv == self.info_sha1:
+            return True
+        return False
+
+    def _download(self, sock):
+        '''Incomplete code under development. DO NOT USE!!'''
+        request_size = 2 ** 14
+        max_subparts = round(self.piece_length / request_size)
+        num_pieces = round(self.length / self.piece_length)
+
+        for piece_current in range(num_pieces):
+            for subpart in tqdm(range(max_subparts)):
+                offset = request_size * subpart
+                msg = struct.pack('>IbIII', 13, 6, piece_current, offset, request_size)
+                sock.sendall(msg)
+                data_recv = sock.recv(request_size)
+                print("Data Recvd : ", data_recv)
+            break
+
+    def main(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.connect((self.peer_ip, self.peer_port))
-            print('Connected')
-            s.sendall(handshake_message)
-            print('Sent! Waiting for reply')
-            reply = s.recv(1024)
-            print(f'Reply Received : {reply}')
+            print(f'Handshake: {self.handshake(s)}')
+            print(f'Unchoked {self.choked_state(s)}')
+            self._download(s)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

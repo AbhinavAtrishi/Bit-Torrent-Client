@@ -2,10 +2,8 @@
 
 from BitTorrent import Reader, Downloader
 
-X = Reader('') # Put a torrent file here
+X = Reader('Lubuntu.torrent') # Put a torrent file here
 X.get_peers()
 
-print(X.response)
-
-D = Downloader(X.peer_list[1], X.port_list[1], X.info, X.info_sha1)
-D.handshake()
+D = Downloader(X.peer_list[0], X.port_list[0], X.info, X.info_sha1, X.piece_length, X.length)
+D.main()
